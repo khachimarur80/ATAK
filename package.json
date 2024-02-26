@@ -1,0 +1,20 @@
+{
+  "name": "atak",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express-ws": "^5.0.2",
+    "express.js": "^1.0.0",
+    "ngrok": "^5.0.0-beta.2",
+    "node-telegram-bot-api": "^0.64.0",
+    "ws": "^8.16.0"
+  }
+}
