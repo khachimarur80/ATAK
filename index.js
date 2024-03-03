@@ -1,104 +1,62 @@
-const express = require('express');
-const http = require('http');
-const TelegramBot = require('node-telegram-bot-api');
-const WebSocket = require('ws');
-const fs = require('fs'); 
+//Dependencies
+const express = require('express')
+const http = require('http')
+const TelegramBot = require('node-telegram-bot-api')
+const WebSocket = require('ws')
+const fs = require('fs');
 const ngrok = require('ngrok')
+const { exec } = require('child_process')
 
-const API_token = "5767381574:AAH6Su1hW6bSZjI3dUqibyMqiJyVuum4LuI";
+//Tokens and variables
+const API_token = "5767381574:AAH6Su1hW6bSZjI3dUqibyMqiJyVuum4LuI"
+const expressPort = 4000
+const ngrokPort = 3000
 
+//Server and websocket instances intialization
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+//Create new websocket route
 wss.on('/locations', (ws, req) => {
+  //Check for successfull connection
   console.log('WebSocket connected');
-
-  ws.on('message', (msg) => {
-    console.log('Received message:', msg);
-    ws.send(msg); // Echo back the received message
-  });
 });
 
-server.listen(4000, function listening() {
-  console.log('Server started on http://localhost:4000');
+//Server initialization
+server.listen(expressPort, function listening() {
+  console.log(`Server started on http://localhost:${expressPort}`);
 });
 
-
-const toRadians = (degrees) => {
-  return degrees * Math.PI / 180;
-}
-
+//Bot instance declaration
 const bot = new TelegramBot(API_token, {
+  //Add webhook to ngrok local server
   webHook: {
-    port: 3000
+    port: ngrokPort
   }
 });
+
+const ngrokProcess = exec(`ngrok http ${ngrokPort}`);
 
 (async function() {
-  const url = 'https://c6ba-169-150-196-109.ngrok-free.app'
-  console.log('Ngrok URL:', url);
-  bot.setWebHook(`${url}/bot${API_token}`);
+  try {
+    const ngrokUrl = await ngrok.connect(ngrokPort);
+    console.log('Ngrok tunnel created:', ngrokUrl);
+
+    // Set bot webhook
+    await bot.setWebHook(`${ngrokUrl}/bot${API_token}`);
+    console.log('Telegram bot webhook set:', `${ngrokUrl}/bot${API_token}`);
+  } 
+  catch (error) {
+    console.error('Error starting Ngrok:', error);
+  }
 })();
 
-let vectors = []
-
-function calculateBearing(lat1, lon1, lat2, lon2) {
-  const lat1Rad = toRadians(lat1);
-  const lon1Rad = toRadians(lon1);
-  const lat2Rad = toRadians(lat2);
-  const lon2Rad = toRadians(lon2);
-
-  const dLon = lon2Rad - lon1Rad;
-
-  const y = Math.sin(dLon) * Math.cos(lat2Rad);
-  const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
-            Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
-  let bearingRad = Math.atan2(y, x);
-
-  bearingRad = (bearingRad + Math.PI * 2) % (Math.PI * 2);
-  const bearingDeg = bearingRad * (180/Math.PI);
-
-  return bearingDeg;
-}
-
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  let dLat = lat2 - lat1;
-  let dLon = lon2 - lon1;
-  
-  let a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  
-  return 6371000 * c;
-}
-
-function generateSVGFromPolar(vectors) {
-  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg">`;
-
-  let currentX = 500;
-  let currentY = 500;
-
-  for (let i = 0; i < vectors.length; i++) {
-    const module = vectors[i].module;
-    const angle = vectors[i].angle;
-
-    const newX = currentX + module * Math.cos(angle * Math.PI / 180);
-    const newY = currentY + module * Math.sin(angle * Math.PI / 180);
-
-    svgContent += `<line x1="${currentX}" y1="${currentY}" x2="${newX}" y2="${newY}" stroke="black" stroke-width="1"/>`;
-
-    currentX = newX;
-    currentY = newY;
-  }
-
-  svgContent += `</svg>`;
-  return svgContent;
-}
-
-
+//Bot event listeners
 bot.on('message', (msg) => {
   if (msg.text) {
     if (msg.text==='/init') {
+      bot.sendMessage(msg.chat.id,`Nuevo chat con ID ${msg.chat.id} registrado en InforMission!`)
       wss.clients.forEach((client) => {
         client.send(JSON.stringify({
           type: 'init',
@@ -115,37 +73,36 @@ bot.on('message', (msg) => {
       })
     }
   }
-})
-
-bot.on('edited_message', (msg) => {
-  if (msg.location) {
-    wss.clients.forEach((client) => {
-      client.send(JSON.stringify({
-        type: 'location',
-        data: msg,
-      }))
+  else if (msg.photo) {
+    const photoId = msg.photo[msg.photo.length - 1].file_id;
+    
+    bot.getFile(photoId).then((photoInfo) => {
+      wss.clients.forEach((client) => {
+        client.send(JSON.stringify({
+          type: 'message',
+          data: {
+            src: `https://api.telegram.org/file/bot${API_token}/${photoInfo.file_path}`,
+            caption: msg.caption,
+          },
+        }))
+      })
     })
-    /*bot.sendMessage(msg.chat.id, 
-      `
-      Location received from ${msg.from.first_name}
-        Longitude: ${msg.location.longitude}
-        Latitude: ${msg.location.latitude}
-        Heading: ${msg.location.heading}
-      `
-    )*/
   }
 })
 
-function createSVGFile(svgContent) {
-  fs.writeFileSync('output.svg', svgContent, 'utf-8');
-}
+bot.on('edited_message', async (msg) => {
+  if (msg.location) {
+    const chatId = msg.chat.id;
+    const senderId = msg.from.id;
+    const chatMember = await bot.getChatMember(chatId, senderId);
 
-process.on('SIGINT', () => {
-  console.log('Script is exiting.');
-  if (vectors.length) {
-    console.log('Creating SVG file ...')
-    let svgContent = generateSVGFromPolar(vectors);
-    createSVGFile(svgContent);
+    if (chatMember.status === 'administrator' || chatMember.status === 'creator') {
+      wss.clients.forEach((client) => {
+        client.send(JSON.stringify({
+          type: 'location',
+          data: msg,
+        }))
+      })
+    }
   }
-  process.exit()
-});
+})

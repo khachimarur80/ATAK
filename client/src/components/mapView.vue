@@ -11,11 +11,10 @@
         name: 'mapView',
         data: () => ({
             map: null,
-            users: [],
             paths: null,
         }),
         props: {
-            points: {
+            users: {
                 required: true,
             }
         },
@@ -23,21 +22,14 @@
             initMap() {
                 this.map = window.M.map({
                     container: 'mapjs',
-                    controls: ['panzoom', 'scale*true', 'scaleline', 'rotate', 'location', 'backgroundlayers', 'getfeatureinfo'],
-                    zoom: 19,
+                    controls: ['scaleline', 'location', 'scale'],
+                    zoom: 16,
                     maxZoom: 22,
                     minZoom: 4,
                     _defaultProj: false,
                     projection: "EPSG:3857*m",
-                    center: proj4('EPSG:4326', 'EPSG:3857', [-3.74612, 40.387603]),
+                    center: proj4('EPSG:4326', 'EPSG:3857', [-3.728518, 40.436676]),
                 });
-
-                const layerinicial = new window.M.layer.WMS({
-                    url: 'https://www.ign.es/wms-inspire/unidades-administrativas?',
-                    name: 'AU.AdministrativeBoundary',
-                    legend: 'Limite administrativo',
-                    tiled: false,
-                }, {});
 
                 const layerUA = new window.M.layer.WMS({
                     url: 'https://www.ign.es/wms-inspire/unidades-administrativas?',
@@ -54,43 +46,108 @@
                     visibility: false,
                 }, {});
 
-                const kml = new window.M.layer.KML({
-                    url: 'https://www.ign.es/web/resources/delegaciones/delegacionesIGN.kml',
-                    name:  'delegacionesIGN',
-                    extract: false,
-                    legend: 'Delegaciones IGN',
-                    transparent: true,
-                });
-
                 this.capaVectorial = new window.M.layer.Vector({ 
                     name: 'capaVectorial',
                     legend: 'Capa Vector',
                 });
 
-                this.map.addLayers([ocupacionSuelo, layerinicial, layerUA, kml, this.capaVectorial]);
+                this.map.addLayers([ocupacionSuelo, layerUA, this.capaVectorial]);
+                this.addPlugins()
+            },
+            addPlugins() {
+                const backImgLayer = new window.M.plugin.BackImgLayer({
+                    position: "BR",
+                    collapsed: true,
+                    collapsible: true,
+                    tooltip: "Capas de fondo",
+                    layerVisibility: true,
+                    columnsNumber: 0,
+                    empty: false,
+                    ids: "mapa,hibrido",
+                    titles: "Mapa,Hibrido",
+                    previews:
+                        "https://componentes.cnig.es/api-core/plugins/backimglayer/images/svqmapa.png,https://componentes.cnig.es/api-core/plugins/backimglayer/images/svqhibrid.png",
+                    layers:
+                        "WMTS*https://www.ign.es/wmts/ign-base?*IGNBaseTodo*GoogleMapsCompatible*Mapa IGN*false*image/jpeg*false*false*true,WMTS*https://www.ign.es/wmts/pnoa-ma?*OI.OrthoimageCoverage*GoogleMapsCompatible*Imagen (PNOA)*false*image/png*false*false*true",
+                });
+
+                const georefimage2 = new window.M.plugin.Georefimage2({
+                    position: 'BR',
+                    collapsed: true,
+                    collapsible: true,
+                    serverUrl: 'https://geoprint.desarrollo.guadaltel.es',
+                    printTemplateUrl: 'https://geoprint.desarrollo.guadaltel.es/print/mapexport',
+                    printStatusUrl: 'https://geoprint.desarrollo.guadaltel.es/print/status',
+                })
+
+                const infocoordinates = new window.M.plugin.Infocoordinates({
+                    position: 'BR',
+                    decimalGEOcoord: 4,
+                    decimalUTMcoord: 2
+                });
+
+                const locator = new window.M.plugin.Locator({
+                    position: 'BR',
+                    collapsible: true,
+                    collapsed: true,
+                    zoom: 16,
+                    pointStyle: 'pinMorado',
+                    byParcelCadastre: false,
+                    byCoordinates: true,
+                    isDraggable: false,
+                });
+
+                const mp = new window.M.plugin.Vectors({
+                    collapsed: true,
+                    collapsible: true,
+                    position: 'BR',
+                });
+
+                const mp1= new window.M.plugin.Rescale({
+                    position: 'BR',
+                });
+
+                this.map.addPlugin(mp);
+                this.map.addPlugin(mp1);
+                this.map.addPlugin(locator);
+                this.map.addPlugin(georefimage2);
+                this.map.addPlugin(backImgLayer);
+                this.map.addPlugin(infocoordinates);
             },
             updateUsers() {
                 let newFeatures = []
-                for (let point in this.points) {
-                    let feature = this.capaVectorial.getFeatureById('User-'+point.toString())
-                    if (feature) {
-                        console.log('edit')
-                        this.capaVectorial.removeFeatures([feature])
+                for (let user in this.users) {
+                    let path = this.capaVectorial.getFeatureById('Path-'+user.toString())
+                    
+                    if (path) {
+                        this.capaVectorial.removeFeatures([path])
                     }
-                    else {
-                        console.log('new')
-                    }
-                    feature = new window.M.Feature('User-'+point.toString(), {
-                        "type": "Feature",
-                        "id": 'User-'+point.toString(),
-                        "geometry": {
-                            "type": "MultiLineString",
-                            "coordinates": [
-                                this.points[point].map(p => proj4('EPSG:4326', 'EPSG:3857', [p.longitude, p.latitude])),
-                            ]
+                    path = new window.M.Feature(
+                        'Path-'+user.toString(), 
+                        {
+                            "type": "Feature",
+                            "id": 'Path-'+user.toString(),
+                            "geometry": {
+                                "type": "MultiLineString",
+                                "coordinates": [
+                                    this.users[user].map(p => proj4('EPSG:4326', 'EPSG:3857', [p.longitude, p.latitude])),
+                                ],
+                            },
                         },
-                    });
-                    newFeatures.push(feature)
+                    );
+
+                    let style = new window.M.style.Polygon(
+                        {
+                            stroke: {
+                                color: '#3e6516',
+                                width: 4
+                            }
+                        },
+                        new window.M.impl.Style({})
+                    )
+                    path.setStyle(style)
+                    console.log(path.getStyle())
+                    newFeatures.push(path)
                 }
                 this.capaVectorial.addFeatures(newFeatures)
             }

@@ -1,16 +1,28 @@
 <template>
+  <navBar 
+    @chatsInterface="currentChat=null"
+     
+    :currentChat="currentChat"
+  />
   <div class="container" v-if="currentChat">
-    <mapView :points="points"/>
     <messagesView :messages="messages"/>
+    <mapView :users="points"/>
   </div>
-  <div class="chat-list" v-else>
-    <div class="chat" v-for="(chat, i) in chats" :key="i">
-      <p class="chat-info">ID: {{ chat.id }}</p>
-      <p class="chat-info">Title: {{ chat.title }}</p>
-      <p class="chat-info">Type: {{ chat.type }}</p>
-      <div class="view-chat-container">
-        <button class="view-chat" @click="currentChat=chat">Ver</button>
+  <div class="contents" v-else>
+    <h1>Mis chats</h1>
+    <hr>
+    <div class="chat-list" v-if="chats.length">
+      <div class="chat" v-for="(chat, i) in chats" :key="i">
+        <p class="chat-info">ID: {{ chat.id }}</p>
+        <p class="chat-info">Title: {{ chat.title }}</p>
+        <p class="chat-info">Type: {{ chat.type }}</p>
+        <div class="view-chat-container">
+          <button class="view-chat" @click="currentChat=chat">Ver</button>
+        </div>
       </div>
+    </div>
+    <div class="suggestion" v-else>
+      Abre telegram, y en un grupo donde incluyas a @InforMissionBot, escribe <span style="color:#4C8BF5">/init</span>.
     </div>
   </div>
 </template>
@@ -19,12 +31,14 @@
 
 import mapView from './components/mapView.vue'
 import messagesView from './components/messagesView.vue'
+import navBar from './components/navBar.vue'
 
 export default {
   name: 'App',
   components: {
     mapView,
-    messagesView
+    messagesView,
+    navBar
   },
   data: () => ({
     chats: [],
@@ -62,6 +76,7 @@ export default {
       }
       else if (message.type == 'message') {
         this.messages.push(message.data)
+        console.log(message.data)
         localStorage.setItem('messages', JSON.stringify(this.messages))
       }
       else if (message.type == 'location') {
@@ -82,6 +97,22 @@ export default {
         console.error('WebSocket error:', error);
     };
 
+  },
+  methods: {
+    downloadMarkdownFile() {
+      if (!this.vault) {
+        console.error('Destination folder not specified.')
+        return
+      }
+
+      const text = "Your Markdown Text Here"
+      const blob = new Blob([text], { type: 'text/markdown' })
+      const filename = 'example.md'
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = filename;
+      a.click()
+    }
   }
 }
 </script>
@@ -92,17 +123,31 @@ export default {
     margin: 0;
     font-family: Verdana, Geneva, Tahoma, sans-serif;
   }
+  .suggestion {
+    color: #888;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 200px;
+  }
   .chat {
     height: 200px;
     width: 200px;
-    border: 3px solid #4C8BF5;
+    border: 3px solid #244800;
     border-radius: 10px;
   }
-  .chat-list, .container {
-    height: 100vh;
+  .chat-list, .container, .contents {
+    height: calc(100vh - 80px);
     width: 100%;
     box-sizing: border-box;
     padding: 50px;
+    position: relative;
+  }
+  .contents h1 {
+    margin: 0px;
+  }
+  .contents {
+    overflow-y: scroll;
   }
   .container {
     padding: 0px;
@@ -112,6 +157,7 @@ export default {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
+    height: fit-content;
   }
   .chat {
     display: flex;
@@ -145,5 +191,12 @@ export default {
   .view-chat:hover {
     background: #eee;
     cursor: pointer;
+  }
+  span:not(.tooltip) {
+    background: white !important;
+    display:block !important;
+    max-width: 150px !important;
+    text-wrap: wrap !important;
+    word-wrap:break-word !important;
   }
 </style>
